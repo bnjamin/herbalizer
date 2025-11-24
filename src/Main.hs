@@ -449,12 +449,30 @@ showAttrs xs = case concatMap expandAttr xs of
           extractValue str = span (\c -> c `notElem` " \t,}") str
       stripQuotes s = s
 
-showInlineContent (PlainInlineContent s) = s
+showInlineContent (PlainInlineContent s) = convertInterpolations s
 showInlineContent (NullInlineContent) = ""
 -- should not be reached:
-showInlineContent (RubyInlineContent s) = "RUBY: " ++ s 
+showInlineContent (RubyInlineContent s) = "RUBY: " ++ s
 
 showInlineContent s = "\nERROR: No showInlineContent for " ++ (show s) ++ "\n"
+
+-- Convert Ruby string interpolations #{...} to ERB <%= ... %>
+convertInterpolations :: String -> String
+convertInterpolations [] = []
+convertInterpolations str@('#':'{':rest) =
+  case extractInterpolation rest of
+    Just (expr, remaining) -> "<%= " ++ expr ++ " %>" ++ convertInterpolations remaining
+    Nothing -> '#':'{': convertInterpolations rest
+convertInterpolations (c:cs) = c : convertInterpolations cs
+
+extractInterpolation :: String -> Maybe (String, String)
+extractInterpolation str = extract str 0 []
+  where
+    extract [] _ _ = Nothing
+    extract ('}':rest) 0 acc = Just (reverse acc, rest)
+    extract ('{':rest) depth acc = extract rest (depth + 1) ('{':acc)
+    extract ('}':rest) depth acc = extract rest (depth - 1) ('}':acc)
+    extract (c:rest) depth acc = extract rest depth (c:acc)
 
     
 pad :: Int -> String
