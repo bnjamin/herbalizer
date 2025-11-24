@@ -8,7 +8,7 @@ import Control.Applicative ((<*))
 import Text.Parsec hiding (State)
 import Text.Parsec.Indent
 import Text.Parsec.Pos
-import Data.List (isPrefixOf, isInfixOf, intercalate, intersperse)
+import Data.List (isPrefixOf, isInfixOf, isSuffixOf, intercalate, intersperse)
 import qualified Data.Map as M
 import Text.Regex.Posix
 import System.Environment
@@ -423,8 +423,18 @@ showAttrs xs = case concatMap expandAttr xs of
       makeAttr (k,v)
         | take 3 v == "<%=" && take 1 (reverse v) == ">" =
             let expr = trim $ drop 3 $ take (length v - 3) v
-            in "<%= ' " ++ k ++ "=\"" ++ k ++ "\"' if (" ++ expr ++ ") %>"
+            in if isConditionalExpr expr
+               then "<%= ' " ++ k ++ "=\"" ++ k ++ "\"' if (" ++ expr ++ ") %>"
+               else k ++ "=\"<%= " ++ expr ++ " %>\""
         | otherwise = intercalate "=" [k, "\"" ++ v ++ "\"" ]
+      isConditionalExpr s =
+        let trimmed = trim s
+        in (": nil" `isSuffixOf` trimmed) ||
+           (": false" `isSuffixOf` trimmed) ||
+           ("? nil :" `isInfixOf` trimmed) ||
+           ("? false :" `isInfixOf` trimmed) ||
+           ("?nil:" `isInfixOf` (filter (/= ' ') trimmed)) ||
+           ("?false:" `isInfixOf` (filter (/= ' ') trimmed))
       expandAttr (k,v)
         | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
         | otherwise = [makeAttr (k,v)]
