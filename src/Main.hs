@@ -439,10 +439,14 @@ showAttrs xs = case concatMap expandAttr xs of
               Nothing -> reverse acc
           breakPair str =
             let trimmed = dropWhile (`elem` " \t,") str
-                (key, afterKey) = span (\c -> c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['_'])) trimmed
+                (key, afterKey) = extractKey trimmed
                 afterColon = dropWhile (`elem` " \t") (dropWhile (== ':') afterKey)
                 (value, afterValue) = extractValue afterColon
             in if null key then (Nothing, "") else (Just (key, value), afterValue)
+          extractKey ('"':rest) =
+            let (k, afterQuote) = span (/= '"') rest
+            in (k, if null afterQuote then "" else tail afterQuote)
+          extractKey str = span (\c -> c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['_'])) str
           extractValue ('"':rest) =
             let (val, afterQuote) = span (/= '"') rest
             in (val, if null afterQuote then "" else tail afterQuote)
