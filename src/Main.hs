@@ -420,10 +420,15 @@ showAttrs xs = case concatMap expandAttr xs of
       [] -> ""
       xs' -> " " ++ intercalate " " xs'
     where
-      makeAttr (k,v) =  intercalate "=" [k, "\"" ++ v ++ "\"" ]
+      makeAttr (k,v)
+        | take 3 v == "<%=" && take 1 (reverse v) == ">" =
+            let expr = trim $ drop 3 $ take (length v - 3) v
+            in "<%= ' " ++ k ++ "=\"" ++ k ++ "\"' if (" ++ expr ++ ") %>"
+        | otherwise = intercalate "=" [k, "\"" ++ v ++ "\"" ]
       expandAttr (k,v)
         | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
         | otherwise = [makeAttr (k,v)]
+      trim = dropWhile (`elem` " \t") . reverse . dropWhile (`elem` " \t") . reverse
       isNestedHash s = take 1 s == "{" && take 1 (reverse s) == "}"
       expandNestedHash prefix hash =
         let content = take (length hash - 2) (drop 1 hash)
