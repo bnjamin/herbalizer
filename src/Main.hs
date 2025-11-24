@@ -1,4 +1,5 @@
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 import Control.Applicative ((<$>), (<*>), (<*), (<$))
 import Control.Monad (liftM)
@@ -12,10 +13,10 @@ import qualified Data.Map as M
 import Text.Regex.Posix
 import System.Environment
 
-type IParser a = ParsecT String () (State SourcePos) a
+type IParser a = IndentParser String () a
 
 iParse :: IParser a -> SourceName -> String -> Either ParseError a
-iParse p s inp = runIndent s $ runParserT p () s inp
+iParse p s inp = runIndent $ runParserT p () s inp
 
 data Tree = Tree Expression [Tree]
     deriving (Show)
@@ -55,13 +56,28 @@ rubyBlock = do
     char '-'
     spaces
     k <- rubyKeyword
-    rest <- manyTill anyChar newline <* spaces
+    firstLine <- manyTill anyChar newline <* spaces
+    continuationLines <- if needsContinuation firstLine
+                         then option [] (try indentedOrBlank)
+                         else return []
+    let cleanedContinuation = intercalate "\n" $ filter (not . null) $ map (dropWhile (`elem` " \t")) $ lines $ concat continuationLines
+        fullLine = if null continuationLines
+                   then k ++ firstLine
+                   else k ++ firstLine ++ "\n" ++ cleanedContinuation
     if (k `elem` midBlockKeywords)
-    then return (RubyMidBlock $ k ++ rest)
+    then return (RubyMidBlock fullLine)
     -- TODO : we need to recognize Ruby expression expression included purely for a side effect,
     -- e.g. "- localvar = Time.now"
-    else return (RubyStartBlock (k ++ rest) False)
-  where midBlockKeywords = ["else", "elsif", "rescue", "ensure", "when", "end"]
+    else return (RubyStartBlock fullLine False)
+  where
+    midBlockKeywords = ["else", "elsif", "rescue", "ensure", "when", "end"]
+    needsContinuation line =
+      let trimmed = reverse $ dropWhile (`elem` " \t") $ reverse line
+      in not (null trimmed) && (last trimmed == ',' || hasUnbalancedDelimiters trimmed)
+    hasUnbalancedDelimiters s =
+      let opens = length (filter (`elem` "([{") s)
+          closes = length (filter (`elem` ")]}") s)
+      in opens /= closes
 
 escapeHtmlExpr = do
   char '!'
@@ -69,8 +85,23 @@ escapeHtmlExpr = do
   return $ RubyExp $ "raw(" ++ line ++ ")"
 
 rubyExp = do
-  line <- ((:) <$> char '=' >> spaces >> manyTill anyChar newline <* spaces)
-  return (RubyExp line)
+  firstLine <- ((:) <$> char '=' >> spaces >> manyTill anyChar newline <* spaces)
+  continuationLines <- if needsContinuation firstLine
+                       then option [] (try indentedOrBlank)
+                       else return []
+  let cleanedContinuation = intercalate "\n" $ filter (not . null) $ map (dropWhile (`elem` " \t")) $ lines $ concat continuationLines
+      fullExpression = if null continuationLines
+                       then firstLine
+                       else firstLine ++ "\n" ++ cleanedContinuation
+  return (RubyExp fullExpression)
+  where
+    needsContinuation line =
+      let trimmed = reverse $ dropWhile (`elem` " \t") $ reverse line
+      in not (null trimmed) && (last trimmed == ',' || hasUnbalancedDelimiters trimmed)
+    hasUnbalancedDelimiters s =
+      let opens = length (filter (`elem` "([{") s)
+          closes = length (filter (`elem` ")]}") s)
+      in opens /= closes
 
 tag :: IParser Expression
 tag = do
@@ -111,7 +142,14 @@ hashAttrs = do
   char '}'
   return xs
 
-cssClassOrId = many (alphaNum <|> oneOf "-_")
+cssClassOrId = do
+  first <- many (alphaNum <|> oneOf "-_:[]/")
+  rest <- option "" (try $ do
+    char '.'
+    d <- digit
+    remainder <- many (alphaNum <|> oneOf "-_:[]/")
+    return $ "." ++ [d] ++ remainder)
+  return $ first ++ rest
 rubyIdentifier = many (alphaNum <|> char '_')
 
 rubyKeyword = many alphaNum
@@ -143,23 +181,71 @@ rubySymbolKey = rubyIdentifier <* char ':'
 
 -- really, we need to parse full-blown Ruby expressions
 rubyValue = do
-    xs <- many (noneOf "},([ \t")  <* spaces
-    rest <- ((lookAhead (oneOf ",}") >> return ""))
-            <|> (betweenStuff '(' ')' )
-            <|> (betweenStuff '[' ']' )
-    return $ "<%= " ++ xs ++ rest ++ " %>"
-  where 
+    expr <- parseRubyExpr
+    return $ "<%= " ++ expr ++ " %>"
+  where
+    parseRubyExpr = do
+      parts <- many1 parseRubyPart
+      return $ concat parts
+    parseRubyPart =
+      (try $ betweenStuff '(' ')') <|>
+      (try $ betweenStuff '[' ']') <|>
+      (try $ betweenStuff '{' '}') <|>
+      (try $ do
+        s <- many1 (noneOf "},()[]")
+        spaces
+        return $ s ++ " ")
     betweenStuff x y = do
-      xs' <- between (char x) (char y) (many $ noneOf [y])
-      return $ [x] ++ xs' ++ [y]
+      char x
+      xs' <- nestedContent y
+      char y
+      spaces
+      return $ [x] ++ xs' ++ [y] ++ " "
+    nestedContent closingChar = do
+      concat <$> many (
+        (try $ betweenStuff '{' '}') <|>
+        (try $ betweenStuff '[' ']') <|>
+        (try $ betweenStuff '(' ')') <|>
+        (try $ do
+          c <- noneOf [closingChar]
+          return [c])
+        )
 
-rocket = spaces >> string "=>" >> spaces 
-aKey = (singleQuotedStr <* rocket)
-  <|> (doubleQuotedStr <* rocket)
-  <|> (rubySymbol <* rocket)
+rocket = spaces >> string "=>" >> spaces
+aKey = (try $ singleQuotedStr <* rocket)
+  <|> (try $ doubleQuotedStr <* rocket)
+  <|> (try $ singleQuotedStr <* char ':' <* spaces)
+  <|> (try $ doubleQuotedStr <* char ':' <* spaces)
+  <|> (try $ rubySymbol <* rocket)
   <|> (rubySymbolKey <* spaces)
 
-aValue = singleQuotedStr <|> rubyString <|> many1 digit <|> rubyValue
+aValue = try nestedHash <|> singleQuotedStr <|> rubyString <|> many1 digit <|> rubyValue
+  where
+    nestedHash = do
+      char '{'
+      content <- nestedHashContent
+      char '}'
+      return $ "{" ++ content ++ "}"
+    nestedHashContent = concat <$> many (
+      (try $ do
+        char '{'
+        inner <- nestedHashContent
+        char '}'
+        return $ "{" ++ inner ++ "}") <|>
+      (try $ do
+        char '"'
+        s <- many (noneOf "\"")
+        char '"'
+        return $ "\"" ++ s ++ "\"") <|>
+      (try $ do
+        char '\''
+        s <- many (noneOf "'")
+        char '\''
+        return $ "'" ++ s ++ "'") <|>
+      (do
+        c <- noneOf "{}"
+        return [c])
+      )
 
 kvPair :: IParser (String, String)
 kvPair = do
@@ -330,10 +416,38 @@ endTag n (Tree (Tag t _ _) _) = pad n ++ "</" ++ t ++ ">"
 selfClosingTag :: Tree -> String
 selfClosingTag (Tree (Tag t a _) _) = "<" ++ t ++ showAttrs a ++ "/>"
 
-showAttrs xs = case map makeAttr xs of 
+showAttrs xs = case concatMap expandAttr xs of
       [] -> ""
       xs' -> " " ++ intercalate " " xs'
-    where makeAttr (k,v) =  intercalate "=" [k, "\"" ++ v ++ "\"" ]
+    where
+      makeAttr (k,v) =  intercalate "=" [k, "\"" ++ v ++ "\"" ]
+      expandAttr (k,v)
+        | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
+        | otherwise = [makeAttr (k,v)]
+      isNestedHash s = take 1 s == "{" && take 1 (reverse s) == "}"
+      expandNestedHash prefix hash =
+        let content = take (length hash - 2) (drop 1 hash)
+            pairs = parseHashPairs content
+        in map (\(k,v) -> makeAttr (prefix ++ "-" ++ k, stripQuotes v)) pairs
+      parseHashPairs s = parsePairs s []
+        where
+          parsePairs [] acc = reverse acc
+          parsePairs str acc =
+            let (pair, rest) = breakPair str
+            in case pair of
+              Just p -> parsePairs rest (p:acc)
+              Nothing -> reverse acc
+          breakPair str =
+            let trimmed = dropWhile (`elem` " \t,") str
+                (key, afterKey) = span (\c -> c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['_'])) trimmed
+                afterColon = dropWhile (`elem` " \t") (dropWhile (== ':') afterKey)
+                (value, afterValue) = extractValue afterColon
+            in if null key then (Nothing, "") else (Just (key, value), afterValue)
+          extractValue ('"':rest) =
+            let (val, afterQuote) = span (/= '"') rest
+            in (val, if null afterQuote then "" else tail afterQuote)
+          extractValue str = span (\c -> c `notElem` " \t,}") str
+      stripQuotes s = s
 
 showInlineContent (PlainInlineContent s) = s
 showInlineContent (NullInlineContent) = ""
@@ -400,10 +514,8 @@ startswith = isPrefixOf
 parse1 s = iParse container "" s 
 
 -- http://stackoverflow.com/questions/15549050/haskell-parsec-how-do-you-use-the-functions-in-text-parsec-indent
-runIndentParser :: (SourcePos -> SourcePos) 
-          -> IndentParser String () a 
-          -> String -> Either ParseError a
-runIndentParser f p src = fst $ flip runState (f $ initialPos "") $ runParserT p () "" src
+parseIndent :: IndentParser String () a -> String -> Either ParseError a
+parseIndent p src = runIndent $ runParserT p () "" src
 
 topLevelsParser1 = many1 (topLevelItem)
 
@@ -414,7 +526,7 @@ topLevelItem = do
     return $ as ++ "\n" ++ concat xs
 
 parseTopLevels s =
-    case (runIndentParser id topLevelsParser1 s) of
+    case (parseIndent topLevelsParser1 s) of
       Left err -> putStrLn (show err)
       Right chunks -> do
         case (mapEithers parse1 chunks) of
