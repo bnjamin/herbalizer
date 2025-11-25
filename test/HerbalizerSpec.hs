@@ -132,6 +132,15 @@ spec = do
       result <- runHerbalizer "- x = 5\n"
       result `shouldContain` "<% x = 5 %>"
 
+  describe "Plain Text with Interpolation" $ do
+    it "handles plain text starting with Ruby interpolation" $ do
+      result <- runHerbalizer "%small\n  #{user.name}\n"
+      result `shouldContain` "<%= user.name %>"
+
+    it "handles plain text with multiple interpolations" $ do
+      result <- runHerbalizer "%p\n  #{first} and #{second}\n"
+      result `shouldContain` "<%= first %> and <%= second %>"
+
   describe "Complex Real-world Examples" $ do
     it "handles Stimulus data attributes" $ do
       result <- runHerbalizer "%div{ data: {controller: \"toggle\", action: \"click->toggle#fire\"} }\n"

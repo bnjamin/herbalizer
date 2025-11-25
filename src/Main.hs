@@ -303,12 +303,13 @@ blankLine = do
 -- Not sure what HAML's escaping rules are here; again HAML makes things unclear & make you
 -- to look at docs
 
-startPlainText = do 
+startPlainText = do
   spaces
-  a <- noneOf "-=.#%" 
-  b <- manyTill anyChar newline
+  -- Allow # if followed by { (Ruby interpolation), otherwise exclude it
+  first <- (try $ string "#{" >> return "#{") <|> (noneOf "-=.#%" >>= \c -> return [c])
+  rest <- manyTill anyChar newline
   spaces
-  return $ PlainText (a:b)
+  return $ PlainText (first ++ rest)
 
 genericExpression :: IParser Expression
 genericExpression = do
@@ -355,7 +356,7 @@ erb n tree@(Tree (RubyExp s) _) = [pad n ++ "<%= " ++ s ++ " %>"]
 
 erb n tree@(Tree (RubySideEffect s) []) = [pad n ++ "<% " ++ s ++ " %>"] 
 
-erb n tree@(Tree (PlainText s) _) = [pad n ++ s] 
+erb n tree@(Tree (PlainText s) _) = [pad n ++ convertInterpolations s] 
 erb n tree@(Tree (Comment s) xs) = (pad n ++ "<!--" ++ s) : ((processChildren (n + 1) xs) ++ [pad n  ++ "-->"])
 
 -- DocTypes
