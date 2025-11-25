@@ -12,14 +12,14 @@ Build-Type: Simple
 Category: Utility
 License:             MIT
 License-file:        LICENSE
-Cabal-Version: >= 1.8
+Cabal-Version: >= 1.10
 Source-repository head
   type:     git
   location: git@github.com:danchoi/herbalizer.git
 Executable herbalizer
   Hs-Source-Dirs: src
   main-is: Main.hs
-
+  Default-Language: Haskell2010
   GHC-Options: -Wall 
   Build-Depends:
     base >= 4 && < 5,
@@ -30,4 +30,17 @@ Executable herbalizer
     regex-posix,
     mtl
 
-  
+Test-Suite herbalizer-test
+  Type: exitcode-stdio-1.0
+  Main-Is: Spec.hs
+  Other-Modules: HerbalizerSpec
+  Hs-Source-Dirs: test
+  GHC-Options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  Build-Tool-Depends: hspec-discover:hspec-discover
+  Build-Depends:
+    base >= 4 && < 5,
+    hspec >= 2.0,
+    process
+  Default-Language: Haskell2010
+
+
