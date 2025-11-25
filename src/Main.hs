@@ -563,7 +563,8 @@ topLevelItem = do
     return $ as ++ "\n" ++ concat xs
 
 parseTopLevels s =
-    case (parseIndent topLevelsParser1 s) of
+    let s' = if null s || last s /= '\n' then s ++ "\n" else s
+    in case (parseIndent topLevelsParser1 s') of
       Left err -> putStrLn (show err)
       Right chunks -> do
         case (mapEithers parse1 chunks) of
