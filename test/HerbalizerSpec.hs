@@ -53,17 +53,25 @@ spec = do
       result <- runHerbalizer "%div.md:flex\n"
       result `shouldBe` "<div class=\"md:flex\"></div>\n"
 
-    it "handles fractional values with dots" $ do
-      result <- runHerbalizer "%div.py-0.5\n"
-      result `shouldBe` "<div class=\"py-0.5\"></div>\n"
-
     it "handles brackets in class names" $ do
       result <- runHerbalizer "%div.w-[200px]\n"
       result `shouldBe` "<div class=\"w-[200px]\"></div>\n"
 
+    it "handles slashes in class names" $ do
+      result <- runHerbalizer "%div.w-1/2\n"
+      result `shouldBe` "<div class=\"w-1/2\"></div>\n"
+
     it "handles complex Tailwind classes" $ do
-      result <- runHerbalizer "%div.md:flex.lg:hidden.py-0.5\n"
-      result `shouldBe` "<div class=\"md:flex lg:hidden py-0.5\"></div>\n"
+      result <- runHerbalizer "%div.md:flex.lg:hidden.w-full\n"
+      result `shouldBe` "<div class=\"md:flex lg:hidden w-full\"></div>\n"
+
+    it "handles adjacent breakpoint classes" $ do
+      result <- runHerbalizer "%div.md:grid-cols-2.3xl:grid-cols-3\n"
+      result `shouldBe` "<div class=\"md:grid-cols-2 3xl:grid-cols-3\"></div>\n"
+
+    it "handles fractional classes via hash syntax" $ do
+      result <- runHerbalizer "%div{ class: \"py-0.5\" }\n"
+      result `shouldBe` "<div class=\"py-0.5\"></div>\n"
 
   describe "Nested Hash Attributes" $ do
     it "expands data hash to data attributes" $ do

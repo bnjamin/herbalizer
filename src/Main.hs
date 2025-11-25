@@ -143,13 +143,10 @@ hashAttrs = do
   return xs
 
 cssClassOrId = do
-  first <- many (alphaNum <|> oneOf "-_:[]/")
-  rest <- option "" (try $ do
-    char '.'
-    d <- digit
-    remainder <- many (alphaNum <|> oneOf "-_:[]/")
-    return $ "." ++ [d] ++ remainder)
-  return $ first ++ rest
+  -- In HAML, the .class syntax cannot contain dots within class names
+  -- Classes with dots (like Tailwind's py-0.5) must use hash syntax: { class: "py-0.5" }
+  -- So we just parse until we hit a dot (which signals a new class) or other delimiter
+  many (alphaNum <|> oneOf "-_:[]/")
 rubyIdentifier = many (alphaNum <|> char '_')
 
 rubyKeyword = many alphaNum
