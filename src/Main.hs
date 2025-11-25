@@ -504,6 +504,7 @@ showAttrs xs = case concatMap expandAttr xs of
             | c == '{' = extractValueBalanced cs parens brackets (braces + 1) (c:acc)
             | c == '}' = extractValueBalanced cs parens brackets (braces - 1) (c:acc)
             | otherwise = extractValueBalanced cs parens brackets braces (c:acc)
+      stripQuotes (':':rest) = rest  -- Strip leading colon from Ruby symbols like :put
       stripQuotes s = s
 
 showInlineContent (PlainInlineContent s) = convertInterpolations s

@@ -91,6 +91,11 @@ spec = do
       result `shouldContain` "data-controller=\"test\""
       result `shouldContain` "data-url=\"path(a, b, c)\""
 
+    it "converts Ruby symbols to strings in nested hash values" $ do
+      result <- runHerbalizer "%div{ data: {method: :put, action: :delete} }\n"
+      result `shouldContain` "data-method=\"put\""
+      result `shouldContain` "data-action=\"delete\""
+
   describe "Conditional Attributes" $ do
     it "renders conditional attributes with ternary ending in nil" $ do
       result <- runHerbalizer "%option{ selected: (x == y) ? \"selected\" : nil }\n"
