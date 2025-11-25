@@ -471,7 +471,17 @@ showAttrs xs = case concatMap expandAttr xs of
       expandNestedHash prefix hash =
         let content = take (length hash - 2) (drop 1 hash)
             pairs = parseHashPairs content
-        in map (\(k,v) -> makeAttr (prefix ++ "-" ++ k, stripQuotes v)) pairs
+        in map (\(k,v) -> makeAttr (prefix ++ "-" ++ k, wrapRubyExpr $ stripQuotes v)) pairs
+      wrapRubyExpr v
+        | isQuotedString v = v  -- Already a quoted string literal
+        | isRubyExpr v = "<%= " ++ v ++ " %>"  -- Ruby expression, wrap in ERB
+        | otherwise = v  -- Other literals (numbers, booleans, etc.)
+      isQuotedString ('"':_) = True
+      isQuotedString ('\'':_) = True
+      isQuotedString _ = False
+      isRubyExpr v = any (\f -> f v) [hasMethodCall, hasVariableRef]
+      hasMethodCall s = '(' `elem` s  -- Contains parentheses indicating method call
+      hasVariableRef s = any (\c -> c `elem` ['@', '.']) s  -- Contains @ or . indicating variable/method access
       parseHashPairs s = parsePairs s []
         where
           parsePairs [] acc = reverse acc

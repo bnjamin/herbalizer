@@ -89,7 +89,12 @@ spec = do
     it "handles method calls with arguments in nested hash values" $ do
       result <- runHerbalizer "%div{ data: {controller: \"test\", url: path(a, b, c)} }\n"
       result `shouldContain` "data-controller=\"test\""
-      result `shouldContain` "data-url=\"path(a, b, c)\""
+      result `shouldContain` "data-url=\"<%= path(a, b, c) %>\""
+
+    it "wraps variable references in ERB tags" $ do
+      result <- runHerbalizer "%div{ data: {id: @user.id, name: current_user.name} }\n"
+      result `shouldContain` "data-id=\"<%= @user.id %>\""
+      result `shouldContain` "data-name=\"<%= current_user.name %>\""
 
     it "converts Ruby symbols to strings in nested hash values" $ do
       result <- runHerbalizer "%div{ data: {method: :put, action: :delete} }\n"
