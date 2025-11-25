@@ -137,10 +137,31 @@ dotClass = (:) <$> char '.' <*> cssClassOrId
 idHash = (:) <$> char '#' <*> cssClassOrId
 
 hashAttrs = do
-  char '{' 
-  xs <- kvPair `sepBy` (spaces >> char ',' >> spaces)
-  char '}'
-  return xs
+  char '{'
+  spaces
+  -- Check for double splat operator **
+  isSplat <- option False (try $ string "**" >> return True)
+  if isSplat
+    then do
+      -- Parse the rest as a Ruby expression with balanced braces
+      expr <- parseSplatExpr 0 []
+      -- Return a special marker that we'll handle in showAttrs
+      return [("**SPLAT**", expr)]
+    else do
+      xs <- kvPair `sepBy` (spaces >> char ',' >> spaces)
+      char '}'
+      return xs
+  where
+    parseSplatExpr depth acc
+      | depth < 0 = fail "Unbalanced braces"
+      | otherwise = do
+          c <- anyChar
+          case c of
+            '{' -> parseSplatExpr (depth + 1) (c:acc)
+            '}' -> if depth == 0
+                   then return (reverse acc)
+                   else parseSplatExpr (depth - 1) (c:acc)
+            _   -> parseSplatExpr depth (c:acc)
 
 cssClassOrId = do
   -- In HAML, the .class syntax cannot contain dots within class names
@@ -464,6 +485,7 @@ showAttrs xs = case concatMap expandAttr xs of
            ("?nil:" `isInfixOf` (filter (/= ' ') trimmed)) ||
            ("?false:" `isInfixOf` (filter (/= ' ') trimmed))
       expandAttr (k,v)
+        | k == "**SPLAT**" = ["<%= (" ++ trim v ++ ").map { |k,v| \"#{k}=\\\"#{v}\\\"\" }.join(' ') %>"]
         | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
         | otherwise = [makeAttr (k,v)]
       trim = dropWhile (`elem` " \t") . reverse . dropWhile (`elem` " \t") . reverse

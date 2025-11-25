@@ -169,6 +169,15 @@ spec = do
       result <- runHerbalizer "%p\n  #{first} and #{second}\n"
       result `shouldContain` "<%= first %> and <%= second %>"
 
+  describe "Hash Splat Operator" $ do
+    it "handles double splat operator for dynamic attributes" $ do
+      result <- runHerbalizer "%div{ **attrs }\n"
+      result `shouldContain` "<%= (attrs).map { |k,v| \"#{k}=\\\"#{v}\\\"\" }.join(' ') %>"
+
+    it "handles double splat with complex expressions" $ do
+      result <- runHerbalizer "%div{ **(local_assigns[:attrs] || {}) }\n"
+      result `shouldContain` "<%= ((local_assigns[:attrs] || {})).map { |k,v| \"#{k}=\\\"#{v}\\\"\" }.join(' ') %>"
+
   describe "Complex Real-world Examples" $ do
     it "handles Stimulus data attributes" $ do
       result <- runHerbalizer "%div{ data: {controller: \"toggle\", action: \"click->toggle#fire\"} }\n"
