@@ -567,10 +567,13 @@ parseTopLevels s =
     in case (parseIndent topLevelsParser1 s') of
       Left err -> putStrLn (show err)
       Right chunks -> do
-        case (mapEithers parse1 chunks) of
+        let nonBlankChunks = filter (not . isBlankChunk) chunks
+        case (mapEithers parse1 nonBlankChunks) of
           Left err -> putStrLn . show $ err
           Right trees -> do
             mapM_ putStrLn $ processChildren 0 trees
+  where
+    isBlankChunk s = all (`elem` " \t\n") s
 
 main = do
     args <- getArgs
