@@ -493,8 +493,11 @@ showAttrs xs = case concatMap expandAttr xs of
           breakPair str =
             let trimmed = dropWhile (`elem` " \t,") str
                 (key, afterKey) = extractKey trimmed
-                afterColon = dropWhile (`elem` " \t") (dropWhile (== ':') afterKey)
-                (value, afterValue) = extractValue afterColon
+                -- Handle both : (colon) and => (hash rocket) syntax
+                afterSep = if take 2 (dropWhile (`elem` " \t") afterKey) == "=>"
+                          then dropWhile (`elem` " \t") (drop 2 (dropWhile (`elem` " \t") afterKey))
+                          else dropWhile (`elem` " \t") (dropWhile (== ':') afterKey)
+                (value, afterValue) = extractValue afterSep
             in if null key then (Nothing, "") else (Just (key, value), afterValue)
           extractKey ('"':rest) =
             let (k, afterQuote) = span (/= '"') rest

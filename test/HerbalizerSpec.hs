@@ -96,6 +96,11 @@ spec = do
       result `shouldContain` "data-id=\"<%= @user.id %>\""
       result `shouldContain` "data-name=\"<%= current_user.name %>\""
 
+    it "handles hash rocket syntax in nested hashes" $ do
+      result <- runHerbalizer "%div{ data: {\"key\" => \"value\", \"id\" => user.id} }\n"
+      result `shouldContain` "data-key=\"value\""
+      result `shouldContain` "data-id=\"<%= user.id %>\""
+
     it "converts Ruby symbols to strings in nested hash values" $ do
       result <- runHerbalizer "%div{ data: {method: :put, action: :delete} }\n"
       result `shouldContain` "data-method=\"put\""
