@@ -230,6 +230,16 @@ aValue = try nestedHash <|> singleQuotedStr <|> rubyString <|> many1 digit <|> r
         char '}'
         return $ "{" ++ inner ++ "}") <|>
       (try $ do
+        char '('
+        inner <- nestedParens
+        char ')'
+        return $ "(" ++ inner ++ ")") <|>
+      (try $ do
+        char '['
+        inner <- nestedBrackets
+        char ']'
+        return $ "[" ++ inner ++ "]") <|>
+      (try $ do
         char '"'
         s <- many (noneOf "\"")
         char '"'
@@ -240,7 +250,27 @@ aValue = try nestedHash <|> singleQuotedStr <|> rubyString <|> many1 digit <|> r
         char '\''
         return $ "'" ++ s ++ "'") <|>
       (do
-        c <- noneOf "{}"
+        c <- noneOf "{}()[]"
+        return [c])
+      )
+    nestedParens = concat <$> many (
+      (try $ do
+        char '('
+        inner <- nestedParens
+        char ')'
+        return $ "(" ++ inner ++ ")") <|>
+      (do
+        c <- noneOf "()"
+        return [c])
+      )
+    nestedBrackets = concat <$> many (
+      (try $ do
+        char '['
+        inner <- nestedBrackets
+        char ']'
+        return $ "[" ++ inner ++ "]") <|>
+      (do
+        c <- noneOf "[]"
         return [c])
       )
 
@@ -463,7 +493,17 @@ showAttrs xs = case concatMap expandAttr xs of
           extractValue ('"':rest) =
             let (val, afterQuote) = span (/= '"') rest
             in (val, if null afterQuote then "" else tail afterQuote)
-          extractValue str = span (\c -> c `notElem` " \t,}") str
+          extractValue str = extractValueBalanced str 0 0 0 []
+          extractValueBalanced [] _ _ _ acc = (reverse acc, [])
+          extractValueBalanced (c:cs) parens brackets braces acc
+            | c `elem` " \t,}" && parens == 0 && brackets == 0 && braces == 0 = (reverse acc, c:cs)
+            | c == '(' = extractValueBalanced cs (parens + 1) brackets braces (c:acc)
+            | c == ')' = extractValueBalanced cs (parens - 1) brackets braces (c:acc)
+            | c == '[' = extractValueBalanced cs parens (brackets + 1) braces (c:acc)
+            | c == ']' = extractValueBalanced cs parens (brackets - 1) braces (c:acc)
+            | c == '{' = extractValueBalanced cs parens brackets (braces + 1) (c:acc)
+            | c == '}' = extractValueBalanced cs parens brackets (braces - 1) (c:acc)
+            | otherwise = extractValueBalanced cs parens brackets braces (c:acc)
       stripQuotes s = s
 
 showInlineContent (PlainInlineContent s) = convertInterpolations s

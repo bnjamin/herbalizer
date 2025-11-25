@@ -86,6 +86,11 @@ spec = do
       result <- runHerbalizer "%div{ data: {\"custom-key\": \"value\"} }\n"
       result `shouldBe` "<div data-custom-key=\"value\"></div>\n"
 
+    it "handles method calls with arguments in nested hash values" $ do
+      result <- runHerbalizer "%div{ data: {controller: \"test\", url: path(a, b, c)} }\n"
+      result `shouldContain` "data-controller=\"test\""
+      result `shouldContain` "data-url=\"path(a, b, c)\""
+
   describe "Conditional Attributes" $ do
     it "renders conditional attributes with ternary ending in nil" $ do
       result <- runHerbalizer "%option{ selected: (x == y) ? \"selected\" : nil }\n"
