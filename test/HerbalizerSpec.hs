@@ -101,6 +101,11 @@ spec = do
       result `shouldContain` "data-key=\"value\""
       result `shouldContain` "data-id=\"<%= user.id %>\""
 
+    it "handles symbol keys with hash rocket syntax" $ do
+      result <- runHerbalizer "%div{ data: {:controller => \"test\", :url => url_for} }\n"
+      result `shouldContain` "data-controller=\"test\""
+      result `shouldContain` "data-url=\"<%= url_for %>\""
+
     it "converts Ruby symbols to strings in nested hash values" $ do
       result <- runHerbalizer "%div{ data: {method: :put, action: :delete} }\n"
       result `shouldContain` "data-method=\"put\""

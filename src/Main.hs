@@ -504,17 +504,18 @@ showAttrs xs = case concatMap expandAttr xs of
       expandNestedHash prefix hash =
         let content = take (length hash - 2) (drop 1 hash)
             pairs = parseHashPairs content
-        in map (\(k,v) -> makeAttr (prefix ++ "-" ++ k, wrapRubyExpr $ stripQuotes v)) pairs
+        in map (\(k,v) -> makeAttr (prefix ++ "-" ++ k, wrapRubyExpr v)) pairs
       wrapRubyExpr v
-        | isQuotedString v = v  -- Already a quoted string literal
-        | isRubyExpr v = "<%= " ++ v ++ " %>"  -- Ruby expression, wrap in ERB
-        | otherwise = v  -- Other literals (numbers, booleans, etc.)
+        | isQuotedString v = stripQuotes v  -- Quoted string literal, strip quotes but don't wrap
+        | isSymbol v = stripQuotes v  -- Ruby symbol, strip colon but don't wrap
+        | isSimpleLiteral v = v  -- Simple literals: true, false, nil, numbers
+        | otherwise = "<%= " ++ v ++ " %>"  -- Anything else is a Ruby expression
       isQuotedString ('"':_) = True
       isQuotedString ('\'':_) = True
       isQuotedString _ = False
-      isRubyExpr v = any (\f -> f v) [hasMethodCall, hasVariableRef]
-      hasMethodCall s = '(' `elem` s  -- Contains parentheses indicating method call
-      hasVariableRef s = any (\c -> c `elem` ['@', '.']) s  -- Contains @ or . indicating variable/method access
+      isSymbol (':':_) = True
+      isSymbol _ = False
+      isSimpleLiteral v = v `elem` ["true", "false", "nil"] || all (\c -> c `elem` ['0'..'9']) v
       parseHashPairs s = parsePairs s []
         where
           parsePairs [] acc = reverse acc
@@ -535,10 +536,17 @@ showAttrs xs = case concatMap expandAttr xs of
           extractKey ('"':rest) =
             let (k, afterQuote) = span (/= '"') rest
             in (k, if null afterQuote then "" else tail afterQuote)
+          extractKey (':':rest) =
+            -- Ruby symbol key like :controller or :"custom-key"
+            case rest of
+              ('"':r) -> let (k, afterQuote) = span (/= '"') r
+                         in (k, if null afterQuote then "" else tail afterQuote)
+              _ -> span (\c -> c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['_'] ++ ['-'])) rest
           extractKey str = span (\c -> c `elem` (['a'..'z'] ++ ['A'..'Z'] ++ ['_'])) str
           extractValue ('"':rest) =
             let (val, afterQuote) = span (/= '"') rest
-            in (val, if null afterQuote then "" else tail afterQuote)
+            -- Keep the quotes to preserve the fact this was a string literal
+            in ('"':val ++ "\"", if null afterQuote then "" else tail afterQuote)
           extractValue str = extractValueBalanced str 0 0 0 []
           extractValueBalanced [] _ _ _ acc = (reverse acc, [])
           extractValueBalanced (c:cs) parens brackets braces acc
@@ -551,6 +559,7 @@ showAttrs xs = case concatMap expandAttr xs of
             | c == '}' = extractValueBalanced cs parens brackets (braces - 1) (c:acc)
             | otherwise = extractValueBalanced cs parens brackets braces (c:acc)
       stripQuotes (':':rest) = rest  -- Strip leading colon from Ruby symbols like :put
+      stripQuotes ('"':rest) = if not (null rest) && last rest == '"' then init rest else ('"':rest)  -- Strip quotes from quoted strings
       stripQuotes s = s
 
 showInlineContent (PlainInlineContent s) = convertInterpolations s
