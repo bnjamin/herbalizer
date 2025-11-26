@@ -115,6 +115,18 @@ spec = do
       result <- runHerbalizer "%img{ src: user.avatar }\n"
       result `shouldContain` "src=\"<%= user.avatar %>\""
 
+    it "treats boolean HTML attributes as conditional" $ do
+      result <- runHerbalizer "%option{ selected: some_variable }\n"
+      result `shouldContain` "<%= ' selected=\"selected\"' if (some_variable) %>"
+
+    it "handles comparison expressions as conditional" $ do
+      result <- runHerbalizer "%option{ selected: x == y }\n"
+      result `shouldContain` "<%= ' selected=\"selected\"' if (x == y) %>"
+
+    it "handles boolean literal true" $ do
+      result <- runHerbalizer "%input{ checked: true }\n"
+      result `shouldContain` "<%= ' checked=\"checked\"' if (true) %>"
+
   describe "Ruby Blocks" $ do
     it "converts if block" $ do
       result <- runHerbalizer "- if condition\n  %div Content\n"
@@ -130,6 +142,10 @@ spec = do
       result `shouldBe` "<div aria-label=\"test\"></div>\n"
 
   describe "Edge Cases" $ do
+    it "preserves empty string attribute values" $ do
+      result <- runHerbalizer "%option{ value: \"\" }\n"
+      result `shouldBe` "<option value=\"\"></option>\n"
+
     it "handles files without trailing newline" $ do
       result <- runHerbalizer "%div Test"
       result `shouldBe` "<div>Test</div>\n"

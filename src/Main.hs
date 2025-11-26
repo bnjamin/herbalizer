@@ -112,9 +112,11 @@ tag = do
     c <- parseInlineContent 
     spaces
     return $ Tag tag (attrs as hs) c
-  where 
-    attrs as hs = filter (\(k, v) -> v /= "") $ 
-      M.toList $ 
+  where
+    attrs as hs =
+      -- Filter out attributes that have empty values, but keep those explicitly set to ""
+      filter (\(k, v) -> not (k `elem` ["class", "id"] && v == "")) $
+      M.toList $
       M.unionWith (\a b -> intercalate " " (filter (/= "") [a,b]))
         (M.fromList hs)
         (M.fromList (makeClassIdAttrs as)) 
@@ -472,18 +474,27 @@ showAttrs xs = case concatMap expandAttr xs of
       makeAttr (k,v)
         | take 3 v == "<%=" && take 1 (reverse v) == ">" =
             let expr = trim $ drop 3 $ take (length v - 3) v
-            in if isConditionalExpr expr
+            in if isBooleanAttr k || isConditionalExpr expr
                then "<%= ' " ++ k ++ "=\"" ++ k ++ "\"' if (" ++ expr ++ ") %>"
                else k ++ "=\"<%= " ++ expr ++ " %>\""
         | otherwise = intercalate "=" [k, "\"" ++ v ++ "\"" ]
+      isBooleanAttr attrName = attrName `elem` ["selected", "checked", "disabled", "readonly", "required", "autofocus", "autoplay", "controls", "loop", "muted", "default", "ismap", "multiple", "open", "reversed", "scoped"]
       isConditionalExpr s =
         let trimmed = trim s
-        in (": nil" `isSuffixOf` trimmed) ||
+            noSpaces = filter (/= ' ') trimmed
+        in trimmed == "true" ||
+           trimmed == "false" ||
+           (": nil" `isSuffixOf` trimmed) ||
            (": false" `isSuffixOf` trimmed) ||
            ("? nil :" `isInfixOf` trimmed) ||
            ("? false :" `isInfixOf` trimmed) ||
-           ("?nil:" `isInfixOf` (filter (/= ' ') trimmed)) ||
-           ("?false:" `isInfixOf` (filter (/= ' ') trimmed))
+           ("?nil:" `isInfixOf` noSpaces) ||
+           ("?false:" `isInfixOf` noSpaces) ||
+           ("==" `isInfixOf` trimmed) ||
+           ("!=" `isInfixOf` trimmed) ||
+           (".present?" `isInfixOf` trimmed) ||
+           (".blank?" `isInfixOf` trimmed) ||
+           (".empty?" `isInfixOf` trimmed)
       expandAttr (k,v)
         | k == "**SPLAT**" = ["<%= (" ++ trim v ++ ").map { |k,v| \"#{k}=\\\"#{v}\\\"\" }.join(' ') %>"]
         | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
