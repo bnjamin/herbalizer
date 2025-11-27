@@ -185,6 +185,10 @@ spec = do
       result <- runHerbalizer "- x = 5\n"
       result `shouldContain` "<% x = 5 %>"
 
+    it "handles multiline Ruby expressions in inline content" $ do
+      result <- runHerbalizer ".test= f.input :field, as: :datepicker,\n  value: \"hello\", label: false\n"
+      result `shouldContain` "<%= f.input :field, as: :datepicker,\nvalue: \"hello\", label: false %>"
+
   describe "Plain Text with Interpolation" $ do
     it "handles plain text starting with Ruby interpolation" $ do
       result <- runHerbalizer "%small\n  #{user.name}\n"

@@ -120,9 +120,26 @@ tag = do
       M.unionWith (\a b -> intercalate " " (filter (/= "") [a,b]))
         (M.fromList hs)
         (M.fromList (makeClassIdAttrs as)) 
-    parseInlineContent = (RubyInlineContent <$> (char '=' >> spaces >> manyTill anyChar newline)) <|> 
-        (PlainInlineContent <$> (manyTill anyChar newline)) 
+    parseInlineContent = parseRubyInline <|>
+        (PlainInlineContent <$> (manyTill anyChar newline))
         <|> return NullInlineContent
+    parseRubyInline = do
+      firstLine <- char '=' >> spaces >> manyTill anyChar newline <* spaces
+      continuationLines <- if needsContinuationInline firstLine
+                           then option [] (try indentedOrBlank)
+                           else return []
+      let cleanedContinuation = intercalate "\n" $ filter (not . null) $ map (dropWhile (`elem` " \t")) $ lines $ concat continuationLines
+          fullExpression = if null continuationLines
+                           then firstLine
+                           else firstLine ++ "\n" ++ cleanedContinuation
+      return (RubyInlineContent fullExpression)
+    needsContinuationInline line =
+      let trimmed = reverse $ dropWhile (`elem` " \t") $ reverse line
+      in not (null trimmed) && (last trimmed == ',' || hasUnbalancedDelimitersInline trimmed)
+    hasUnbalancedDelimitersInline s =
+      let opens = length (filter (`elem` "([{") s)
+          closes = length (filter (`elem` ")]}") s)
+      in opens /= closes
 
 makeClassIdAttrs :: [String] -> [(String, String)]
 makeClassIdAttrs cs = classes : [("id", ids)]
