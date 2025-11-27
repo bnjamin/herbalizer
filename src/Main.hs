@@ -482,19 +482,26 @@ showAttrs xs = case concatMap expandAttr xs of
       isConditionalExpr s =
         let trimmed = trim s
             noSpaces = filter (/= ' ') trimmed
-        in trimmed == "true" ||
-           trimmed == "false" ||
-           (": nil" `isSuffixOf` trimmed) ||
-           (": false" `isSuffixOf` trimmed) ||
-           ("? nil :" `isInfixOf` trimmed) ||
-           ("? false :" `isInfixOf` trimmed) ||
-           ("?nil:" `isInfixOf` noSpaces) ||
-           ("?false:" `isInfixOf` noSpaces) ||
-           ("==" `isInfixOf` trimmed) ||
-           ("!=" `isInfixOf` trimmed) ||
-           (".present?" `isInfixOf` trimmed) ||
-           (".blank?" `isInfixOf` trimmed) ||
-           (".empty?" `isInfixOf` trimmed)
+            -- Check if it's a ternary that ends with a non-nil/false value
+            hasTernaryWithValue = ("?" `isInfixOf` trimmed) &&
+                                  (not (": nil" `isSuffixOf` trimmed)) &&
+                                  (not (": false" `isSuffixOf` trimmed)) &&
+                                  (not (":nil" `isSuffixOf` noSpaces)) &&
+                                  (not (":false" `isSuffixOf` noSpaces))
+        in not hasTernaryWithValue &&
+           (trimmed == "true" ||
+            trimmed == "false" ||
+            (": nil" `isSuffixOf` trimmed) ||
+            (": false" `isSuffixOf` trimmed) ||
+            ("? nil :" `isInfixOf` trimmed) ||
+            ("? false :" `isInfixOf` trimmed) ||
+            ("?nil:" `isInfixOf` noSpaces) ||
+            ("?false:" `isInfixOf` noSpaces) ||
+            ("==" `isInfixOf` trimmed) ||
+            ("!=" `isInfixOf` trimmed) ||
+            (".present?" `isInfixOf` trimmed) ||
+            (".blank?" `isInfixOf` trimmed) ||
+            (".empty?" `isInfixOf` trimmed))
       expandAttr (k,v)
         | k == "**SPLAT**" = ["<%= (" ++ trim v ++ ").map { |k,v| \"#{k}=\\\"#{v}\\\"\" }.join(' ') %>"]
         | (k == "data" || k == "aria") && isNestedHash v = expandNestedHash k v
@@ -550,7 +557,7 @@ showAttrs xs = case concatMap expandAttr xs of
           extractValue str = extractValueBalanced str 0 0 0 []
           extractValueBalanced [] _ _ _ acc = (reverse acc, [])
           extractValueBalanced (c:cs) parens brackets braces acc
-            | c `elem` " \t,}" && parens == 0 && brackets == 0 && braces == 0 = (reverse acc, c:cs)
+            | c `elem` ",}" && parens == 0 && brackets == 0 && braces == 0 = (reverse acc, c:cs)
             | c == '(' = extractValueBalanced cs (parens + 1) brackets braces (c:acc)
             | c == ')' = extractValueBalanced cs (parens - 1) brackets braces (c:acc)
             | c == '[' = extractValueBalanced cs parens (brackets + 1) braces (c:acc)

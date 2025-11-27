@@ -1,0 +1,3 @@
+[tools]
+cabal = "latest"
+ghc = "latest"

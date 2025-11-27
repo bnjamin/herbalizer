@@ -111,6 +111,10 @@ spec = do
       result `shouldContain` "data-method=\"put\""
       result `shouldContain` "data-action=\"delete\""
 
+    it "handles ternary operators with string values in nested hashes" $ do
+      result <- runHerbalizer "%div{ data: {show: (a || b) ? \"true\" : \"false\"} }\n"
+      result `shouldContain` "data-show=\"<%= (a || b) ? \"true\" : \"false\" %>\""
+
   describe "Conditional Attributes" $ do
     it "renders conditional attributes with ternary ending in nil" $ do
       result <- runHerbalizer "%option{ selected: (x == y) ? \"selected\" : nil }\n"
